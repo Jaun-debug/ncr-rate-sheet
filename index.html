@@ -1,5 +1,84 @@
 <!DOCTYPE html>
 <html lang="en"><head>
+<script>
+/* Visitor exit tracking — fires once per page (>=30s dwell) on leave */
+(function(){
+  var ENDPOINT   = "https://ncr-rate-sheet.vercel.app/api/track";
+  var PROD_HOST  = "ncr-rate-sheet.vercel.app";   /* only report from the real production site */
+  var MIN_SECONDS= 30;
+  var host = location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return;   /* skip local dev */
+  if (host !== PROD_HOST) return;                             /* skip previews / other hosts */
+
+  var start = Date.now();
+  var sent  = false;
+  var geo   = null;
+  try {
+    fetch("https://get.geojs.io/v1/ip/geo.json")
+      .then(function(r){ return r.json(); })
+      .then(function(g){ geo = g; })
+      .catch(function(){});
+  } catch(e){}
+
+  function fmt(s){ var m=Math.floor(s/60), ss=s%60; return (m>0? m+"m " : "")+ss+"s"; }
+
+  function source(){
+    try{
+      var p  = new URLSearchParams(location.search);
+      var us = (p.get("utm_source")||"").toLowerCase();
+      var um = (p.get("utm_medium")||"").toLowerCase();
+      if (p.get("gclid") || p.get("gad_source")) return "Google Ads (paid)";
+      if (p.get("msclkid"))                       return "Microsoft Ads (paid)";
+      if (um==="cpc" || um==="ppc" || um==="paid") return "Paid ("+(us||um)+")";
+      if (us || um)                                return "Campaign ("+(us||um)+")";
+      var ref = document.referrer || "";
+      if (!ref) return "Direct";
+      var rh=""; try{ rh=new URL(ref).hostname.toLowerCase(); }catch(e){}
+      if (rh === host) return "Internal";
+      if (/facebook|instagram|fb\.|t\.co|twitter|x\.com|linkedin|pinterest|tiktok|whatsapp/.test(rh)) return "Social ("+rh+")";
+      if (/google|bing|yahoo|duckduckgo|ecosia|baidu/.test(rh)) return "Organic search ("+rh+")";
+      return "Referral ("+rh+")";
+    }catch(e){ return "Unknown"; }
+  }
+
+  function dkey(){ return "ve_"+location.pathname+"_"+new Date().toISOString().slice(0,10); }
+
+  function send(reason){
+    if (sent) return;
+    var secs = Math.round((Date.now()-start)/1000);
+    if (secs < MIN_SECONDS) return;
+    try{ if (sessionStorage.getItem(dkey())) { sent=true; return; } }catch(e){}
+    sent = true;
+    try{ sessionStorage.setItem(dkey(),"1"); }catch(e){}
+
+    var loc = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "Unknown";
+    var payload = {
+      page_name: document.title || location.pathname,
+      time_spent: fmt(secs),
+      seconds: secs,
+      visitor_location: loc,
+      country: geo ? (geo.country || "") : "",
+      source: source(),
+      page_link: location.href,
+      timestamp: new Date().toISOString(),
+      reason: reason
+    };
+    var body = JSON.stringify(payload);
+    try{
+      if (navigator.sendBeacon){
+        navigator.sendBeacon(ENDPOINT, new Blob([body], {type:"text/plain"}));
+      } else {
+        fetch(ENDPOINT, {method:"POST", body:body, headers:{"Content-Type":"text/plain"}, keepalive:true});
+      }
+    }catch(e){}
+  }
+
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState==="hidden") send("hidden"); });
+  window.addEventListener("pagehide",     function(){ send("pagehide"); });
+  window.addEventListener("beforeunload", function(){ send("beforeunload"); });
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Namibia Car Rental · 2026 STO Rate Sheet</title>
