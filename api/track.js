@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
   const KEY = process.env.BREVO_API_KEY;
   if (!KEY) return res.status(500).json({ error: 'BREVO_API_KEY environment variable not set' });
 
-  const SENDER = process.env.SENDER_EMAIL || 'jaun.husselmann@gmail.com';
+  const SENDER = process.env.SENDER_EMAIL || 'bookings@desert-tracks.com';
   const TO = process.env.NOTIFY_EMAIL || 'jaun.husselmann@gmail.com';
 
   const esc = s => String(s == null ? '' : s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
